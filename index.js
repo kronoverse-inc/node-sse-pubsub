@@ -19,8 +19,8 @@ module.exports = class SSEChannel {
 		}
 	}
 
-	publish(data, eventName) {
-		const id = this.nextID;
+	publish(data, eventName, eventId) {
+		const id = eventId || this.nextID++;
 		if (typeof data === "object") data = JSON.stringify(data);
 		data = data ? data.split(/[\r\n]+/).map(str => 'data: '+str).join('\n') : '';
 
@@ -35,7 +35,6 @@ module.exports = class SSEChannel {
 		while (this.messages.length > this.options.historySize) {
 			this.messages.shift();
 		}
-		this.nextID++;
 
 		return id;
 	}
@@ -51,7 +50,12 @@ module.exports = class SSEChannel {
 		let body = "retry: " + this.options.clientRetryInterval + '\n\n';
 
 		const lastID = Number.parseInt(req.headers['last-event-id'], 10);
-		const rewind = (!Number.isNaN(lastID)) ? ((this.nextID-1)-lastID) : this.options.rewind;
+		let rewind = this.options.rewind;
+		if(!Number.isNaN(lastID)){
+			const index = this.messages.findIndex(m => m.id > lastID);
+			if(index > -1) rewind = this.messages.length - index;
+			else rewind = 0;
+		}
 		if (rewind) {
 			this.messages.filter(m => hasEventMatch(c.events, m.eventName)).slice(0-rewind).forEach(m => {
 				body += m.output
